@@ -16,9 +16,9 @@ source $VENV_DIR/bin/activate
 pip install --upgrade pip --quiet
 pip install -r req.txt --quiet
 
-python lab1/data_creation.py
-python lab1/data_preprocessing.py
-python lab1/model_preparation.py
-python lab1/model_testing.py
+python data_creation.py
+python data_preprocessing.py
+python model_preparation.py
+python model_testing.py
 
 echo "Pipeline finished successfully"
