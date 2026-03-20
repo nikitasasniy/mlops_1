@@ -3,20 +3,23 @@ pipeline {
 
     environment {
         VENV = ".venv"
-        GITHUB_REPO = 'mlops_1'
-        GITHUB_ACCOUNT = 'nikitasasniy'
-        REPORT_DIR = "reports"
+        GITHUB_REPO = 'mlops_1'               // имя репозитория
+        GITHUB_ACCOUNT = 'nikitasasniy'       // GitHub username
     }
 
     stages {
+
         stage('Checkout') {
             steps {
-                git(
-                    url: "https://github.com/${env.GITHUB_ACCOUNT}/${GITHUB_REPO}.git",
-                    branch: 'main',
-                    credentialsId: 'github-token-id'
-                )
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: 'main']],
+                    userRemoteConfigs: [[
+                        url: "https://github.com/${env.GITHUB_ACCOUNT}/${env.GITHUB_REPO}.git"
+                    ]]
+                ])
                 script {
+                    // SHA последнего коммита
                     env.GIT_COMMIT = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
                     echo "Current commit SHA: ${env.GIT_COMMIT}"
                 }
@@ -43,39 +46,30 @@ pipeline {
             }
         }
 
-        stage('Model training') {
+        stage('Model training & testing') {
             steps {
                 sh ". $VENV/bin/activate && python model_preparation.py"
+                sh '''
+                mkdir -p reports
+                . $VENV/bin/activate && python model_testing.py > reports/model_testing_output.txt
+                '''
             }
         }
 
-        stage('Model testing & reports') {
+        stage('Archive reports') {
             steps {
-                script {
-                    sh "mkdir -p ${REPORT_DIR}"
-                    def output = sh(script: ". $VENV/bin/activate && python model_testing.py", returnStdout: true).trim()
-                    writeFile file: "${REPORT_DIR}/model_testing_output.txt", text: output
-                    archiveArtifacts artifacts: "${REPORT_DIR}/**", allowEmptyArchive: true
-                }
+                archiveArtifacts artifacts: 'reports/**/*', allowEmptyArchive: true
             }
         }
 
         stage('Publish to GitHub') {
             steps {
                 withCredentials([string(credentialsId: 'github-token-id', variable: 'GITHUB_TOKEN')]) {
-                    script {
-                        // Минимальный Check
-                        sh """
-                        gh api repos/${GITHUB_ACCOUNT}/${GITHUB_REPO}/check-runs \
-                          -H "Authorization: token \$GITHUB_TOKEN" \
-                          -F name="Jenkins CI" \
-                          -F head_sha=${GIT_COMMIT} \
-                          -F status="completed" \
-                          -F conclusion="success" \
-                          -F output.title="Build & Tests" \
-                          -F output.summary="✅ Jenkins build finished successfully. Reports archived."
-                        """
-                    }
+                    sh '''
+                    echo "$GITHUB_TOKEN" | gh auth login --with-token
+                    gh api repos/${GITHUB_ACCOUNT}/${GITHUB_REPO}/commits/${GIT_COMMIT}/comments \
+                        -f body="✅ Jenkins build finished successfully. Reports archived: [Jenkins workspace](file://$PWD/reports)"
+                    '''
                 }
             }
         }
@@ -83,7 +77,7 @@ pipeline {
 
     post {
         always {
-            echo "Pipeline finished. Jenkins артефакты доступны, GitHub Check создан."
+            echo "Pipeline finished. Отчеты и графики опубликованы в GitHub к последнему коммиту."
         }
     }
 }
