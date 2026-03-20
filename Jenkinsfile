@@ -2,23 +2,20 @@ pipeline {
     agent any
 
     environment {
-        VENV = ".venv"                         // путь к виртуальному окружению
-        GITHUB_REPO = 'nikitasasniy/mlops_1'  // твой репозиторий
-        GITHUB_ACCOUNT = 'nikitasasniy'       // GitHub username/organization
-        GITHUB_CREDENTIALS = 'github-token-id' // Jenkins credentials ID с PAT
+        VENV = ".venv"
+        GITHUB_REPO = 'mlops_1'              // имя репозитория
+        GITHUB_ACCOUNT = 'nikitasasniy'      // GitHub username
+        GITHUB_CREDENTIALS = 'github-token-id' // Jenkins credentials ID с PAT (Secret text)
     }
 
     stages {
-
         stage('Checkout') {
             steps {
                 git(
-                    url: 'https://github.com/nikitasasniy/mlops_1.git',
+                    url: "https://github.com/${env.GITHUB_ACCOUNT}/${env.GITHUB_REPO}.git",
                     branch: 'main',
                     credentialsId: env.GITHUB_CREDENTIALS
                 )
-
-                // Получаем SHA текущего коммита
                 script {
                     env.GIT_COMMIT = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
                     echo "Current commit SHA: ${env.GIT_COMMIT}"
@@ -65,16 +62,7 @@ pipeline {
                     def rmse = rmseLine?.split('=')[1]?.trim() ?: "N/A"
                     echo "Test RMSE: ${rmse}"
 
-                    // Сохраняем RMSE в environment, чтобы использовать в post
                     env.RMSE = rmse
-                }
-            }
-        }
-
-        stage('Check credentials') {
-            steps {
-                script {
-                    echo "Credentials ID: ${env.GITHUB_CREDENTIALS}"
                 }
             }
         }
@@ -83,27 +71,30 @@ pipeline {
     post {
         success {
             script {
-                githubNotify(
-                    context: 'ML Model Test',
-                    status: 'SUCCESS',
-                    description: "RMSE: ${env.RMSE}",
+                // GitHub Checks Plugin
+                githubChecks(
+                    status: 'COMPLETED',
+                    conclusion: 'SUCCESS',
+                    checkName: 'ML Model Test',
+                    description: "Test RMSE: ${env.RMSE}",
+                    githubCredentialsId: env.GITHUB_CREDENTIALS,
+                    commit: env.GIT_COMMIT,
                     repo: env.GITHUB_REPO,
-                    account: env.GITHUB_ACCOUNT,
-                    credentialsId: env.GITHUB_CREDENTIALS,
-                    sha: env.GIT_COMMIT
+                    owner: env.GITHUB_ACCOUNT
                 )
             }
         }
         failure {
             script {
-                githubNotify(
-                    context: 'ML Model Test',
-                    status: 'FAILURE',
+                githubChecks(
+                    status: 'COMPLETED',
+                    conclusion: 'FAILURE',
+                    checkName: 'ML Model Test',
                     description: "Pipeline failed",
+                    githubCredentialsId: env.GITHUB_CREDENTIALS,
+                    commit: env.GIT_COMMIT,
                     repo: env.GITHUB_REPO,
-                    account: env.GITHUB_ACCOUNT,
-                    credentialsId: env.GITHUB_CREDENTIALS,
-                    sha: env.GIT_COMMIT
+                    owner: env.GITHUB_ACCOUNT
                 )
             }
         }
