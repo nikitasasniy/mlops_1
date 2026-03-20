@@ -57,22 +57,38 @@ pipeline {
         stage('Model Testing') {
             steps {
                 script {
-                    // Активируем виртуальное окружение и запускаем скрипт
+                    // Запуск скрипта тестирования модели и получение вывода
                     def output = sh(script: ". $VENV/bin/activate && python model_testing.py", returnStdout: true).trim()
-        
-                    // Находим строку с RMSE
+
+                    // Извлекаем строку с RMSE
                     def rmseLine = output.split('\n').find { it.toLowerCase().contains('rmse') }
                     def rmse = rmseLine?.split('=')[-1]?.trim() ?: "N/A"
-        
+
                     echo "Test RMSE: ${rmse}"
-        
-                    // Публикуем через GitHub Checks
-                    publishChecks(
-                        name: 'ML Model RMSE',
-                        status: 'COMPLETED',
-                        conclusion: 'SUCCESS',
-                        summary: "Test RMSE: ${rmse}"
-                    )
+
+                    // Сохраняем RMSE в файл как артефакт на всякий случай
+                    writeFile file: 'rmse.txt', text: rmse
+                    archiveArtifacts artifacts: 'rmse.txt', allowEmptyArchive: true
+
+                    // Публикация через GitHub Checks, если плагин доступен
+                    try {
+                        publishChecks(
+                            name: 'ML Model RMSE',
+                            status: 'COMPLETED',
+                            conclusion: 'SUCCESS',
+                            summary: "Test RMSE: ${rmse}"
+                        )
+                    } catch (err) {
+                        echo "publishChecks недоступен или не настроен: ${err}"
+                    }
                 }
             }
         }
+    }
+
+    post {
+        always {
+            echo "Pipeline finished. RMSE сохранён в rmse.txt"
+        }
+    }
+}
