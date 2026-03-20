@@ -53,7 +53,9 @@ pipeline {
         stage('Model Testing') {
             steps {
                  script {
-                    def rmse = sh(script: ". $VENV/bin/activate && python model_testing.py | grep 'rmse=' | cut -d'=' -f2", returnStdout: true).trim()
+                     def output = sh(script: ". $VENV/bin/activate && python model_testing.py", returnStdout: true).trim()
+                    def rmseLine = output.readLines().find { it.contains('rmse=') }
+                    def rmse = rmseLine?.split('=')[1]?.trim() ?: "N/A"
                     echo "Test RMSE: ${rmse}"
                 }
             }
