@@ -79,13 +79,13 @@ pipeline {
                         title: "ML Pipeline Results",
                         summary: "RMSE: ${env.RMSE}",
                         text: """
-Commit: ${env.GIT_COMMIT}
-
-RMSE: ${env.RMSE}
-
-Logs:
-${env.PIPELINE_LOG}
-""",
+                        Commit: ${env.GIT_COMMIT}
+                        
+                        RMSE: ${env.RMSE}
+                        
+                        Logs:
+                        ${env.PIPELINE_LOG}
+                        """,
                         detailsURL: env.BUILD_URL,   // 🔥 важно (из гайда)
                         conclusion: conclusion
                 }
