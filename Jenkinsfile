@@ -53,18 +53,8 @@ pipeline {
         stage('Model Testing') {
             steps {
                  script {
-                    def output = sh(script: '''
-                        . $VENV/bin/activate python model_testing.py
-                    ''', returnStdout: true).trim()
-        
-                    echo "Raw output: ${output}"
-        
-                    def matcher = output =~ /rmse=(\d+\.\d+)/
-                    def rmseValue = matcher ? matcher[0][1] : "N/A"
-                    echo "Model RMSE: ${rmseValue}"
-        
-                    env.RMSE = rmseValue
-                    currentBuild.description = "RMSE: ${rmseValue}"
+                    def rmse = sh(script: ". $VENV/bin/activate && python model_testing.py | grep 'rmse=' | cut -d'=' -f2", returnStdout: true).trim()
+                    echo "Test RMSE: ${rmse}"
                 }
             }
         }
