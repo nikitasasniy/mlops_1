@@ -5,19 +5,18 @@ pipeline {
         VENV = ".venv"
         GITHUB_REPO = 'mlops_1'
         GITHUB_ACCOUNT = 'nikitasasniy'
+        GITHUB_TOKEN = credentials('github-token-id') // Jenkins credentials ID с PAT
+        ARTIFACT_BRANCH = 'jenkins-artifacts'
     }
 
     stages {
-
         stage('Checkout') {
             steps {
-                checkout([
-                    $class: 'GitSCM',
-                    branches: [[name: 'main']],
-                    userRemoteConfigs: [[
-                        url: "https://github.com/${env.GITHUB_ACCOUNT}/${env.GITHUB_REPO}.git"
-                    ]]
-                ])
+                git(
+                    url: "https://github.com/${env.GITHUB_ACCOUNT}/${env.GITHUB_REPO}.git",
+                    branch: 'main',
+                    credentialsId: 'github-token-id'
+                )
                 script {
                     env.GIT_COMMIT = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
                     echo "Current commit SHA: ${env.GIT_COMMIT}"
@@ -40,47 +39,47 @@ pipeline {
 
         stage('Data creation & preprocessing') {
             steps {
-                sh ". $VENV/bin/activate && python data_creation.py"
-                sh ". $VENV/bin/activate && python data_preprocessing.py"
+                sh ". $VENV/bin/activate && python data_creation.py && python data_preprocessing.py"
             }
         }
 
         stage('Model training & testing') {
             steps {
-                sh ". $VENV/bin/activate && python model_preparation.py"
-                sh '''
-                mkdir -p reports
-                . $VENV/bin/activate && python model_testing.py > reports/model_testing_output.txt
-                '''
+                sh ". $VENV/bin/activate && python model_preparation.py && python model_testing.py"
             }
         }
 
-        stage('Archive reports') {
+        stage('Publish reports to GitHub') {
             steps {
-                archiveArtifacts artifacts: 'reports/**/*', allowEmptyArchive: true
-            }
-        }
-
-        stage('Publish to GitHub') {
-            steps {
-                withCredentials([string(credentialsId: 'github-token-id', variable: 'GITHUB_TOKEN')]) {
-                    // Здесь токен НЕ подставляется в GString, а shell сам использует переменную
+                script {
                     sh '''
-                    curl -s -X POST \
-                        -H "Authorization: token $GITHUB_TOKEN" \
-                        -H "Accept: application/vnd.github+json" \
-                        https://api.github.com/repos/${GITHUB_ACCOUNT}/${GITHUB_REPO}/commits/${GIT_COMMIT}/comments \
-                        -d '{"body":"✅ Jenkins build finished successfully. Все отчеты в reports/"}'
+                    # Настроим git для пуша артефактов
+                    git config user.name "Jenkins CI"
+                    git config user.email "jenkins@example.com"
+
+                    # Создаём отдельную ветку для артефактов
+                    git checkout -B ${ARTIFACT_BRANCH}
+
+                    # Создаём папку reports, если ещё нет
+                    mkdir -p reports
+
+                    # Копируем артефакты в папку reports
+                    cp -r lab1/*.png reports/ 2>/dev/null || true
+                    cp -r lab1/*.txt reports/ 2>/dev/null || true
+
+                    # Добавляем файлы и пушим
+                    git add reports
+                    git commit -m "Jenkins artifacts for commit ${GIT_COMMIT}" || echo "Nothing to commit"
+                    git push https://${GITHUB_ACCOUNT}:${GITHUB_TOKEN}@github.com/${GITHUB_ACCOUNT}/${GITHUB_REPO}.git ${ARTIFACT_BRANCH} --force
                     '''
                 }
             }
         }
-
     }
 
     post {
         always {
-            echo "Pipeline finished. Отчеты и графики опубликованы в GitHub к последнему коммиту."
+            echo "Pipeline finished. Все отчеты и графики опубликованы в ветке ${ARTIFACT_BRANCH}."
         }
     }
 }
