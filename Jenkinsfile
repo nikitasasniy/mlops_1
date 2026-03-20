@@ -2,15 +2,17 @@ pipeline {
     agent any
 
     environment {
+        VENV = ".venv"
         GITHUB_REPO = 'mlops_1'
         GITHUB_ACCOUNT = 'nikitasasniy'
+        REPORT_DIR = "reports"
     }
 
     stages {
         stage('Checkout') {
             steps {
                 git(
-                    url: "https://github.com/${env.GITHUB_ACCOUNT}/${env.GITHUB_REPO}.git",
+                    url: "https://github.com/${env.GITHUB_ACCOUNT}/${GITHUB_REPO}.git",
                     branch: 'main',
                     credentialsId: 'github-token-id'
                 )
@@ -21,14 +23,59 @@ pipeline {
             }
         }
 
-        stage('Post GitHub comment') {
+        stage('Setup environment') {
+            steps {
+                sh '''
+                if [ ! -d "$VENV" ]; then
+                    python3 -m venv $VENV
+                fi
+                . $VENV/bin/activate
+                pip install --upgrade pip --quiet
+                pip install -r req.txt --quiet
+                '''
+            }
+        }
+
+        stage('Data creation & preprocessing') {
+            steps {
+                sh ". $VENV/bin/activate && python data_creation.py"
+                sh ". $VENV/bin/activate && python data_preprocessing.py"
+            }
+        }
+
+        stage('Model training') {
+            steps {
+                sh ". $VENV/bin/activate && python model_preparation.py"
+            }
+        }
+
+        stage('Model testing & reports') {
+            steps {
+                script {
+                    sh "mkdir -p ${REPORT_DIR}"
+                    def output = sh(script: ". $VENV/bin/activate && python model_testing.py", returnStdout: true).trim()
+                    writeFile file: "${REPORT_DIR}/model_testing_output.txt", text: output
+                    archiveArtifacts artifacts: "${REPORT_DIR}/**", allowEmptyArchive: true
+                }
+            }
+        }
+
+        stage('Publish to GitHub') {
             steps {
                 withCredentials([string(credentialsId: 'github-token-id', variable: 'GITHUB_TOKEN')]) {
-                    sh """
-                    gh api repos/${GITHUB_ACCOUNT}/${GITHUB_REPO}/commits/${GIT_COMMIT}/comments \
-                      -H "Authorization: token \$GITHUB_TOKEN" \
-                      -f body="success"
-                    """
+                    script {
+                        // Минимальный Check
+                        sh """
+                        gh api repos/${GITHUB_ACCOUNT}/${GITHUB_REPO}/check-runs \
+                          -H "Authorization: token \$GITHUB_TOKEN" \
+                          -F name="Jenkins CI" \
+                          -F head_sha=${GIT_COMMIT} \
+                          -F status="completed" \
+                          -F conclusion="success" \
+                          -F output.title="Build & Tests" \
+                          -F output.summary="✅ Jenkins build finished successfully. Reports archived."
+                        """
+                    }
                 }
             }
         }
@@ -36,7 +83,7 @@ pipeline {
 
     post {
         always {
-            echo "Pipeline finished. Проверка публикации на GitHub завершена."
+            echo "Pipeline finished. Jenkins артефакты доступны, GitHub Check создан."
         }
     }
 }
