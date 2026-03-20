@@ -57,10 +57,9 @@ pipeline {
         stage('Model Testing') {
             steps {
                 script {
-                    // Запуск теста и получение RMSE
                     def output = sh(script: ". $VENV/bin/activate && python model_testing.py", returnStdout: true).trim()
                     def rmseLine = output.readLines().find { it.toLowerCase().contains('rmse') }
-                    def rmse = rmseLine?.split('=')[1]?.trim() ?: "N/A"
+                    def rmse = rmseLine?.split('=')[-1]?.trim() ?: "N/A"
                     echo "Test RMSE: ${rmse}"
 
                     env.RMSE = rmse
