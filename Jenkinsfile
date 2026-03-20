@@ -72,7 +72,7 @@ pipeline {
         success {
             script {
                 // GitHub Checks Plugin
-                githubChecks(
+                publishChecks(
                     status: 'COMPLETED',
                     conclusion: 'SUCCESS',
                     checkName: 'ML Model Test',
@@ -86,7 +86,7 @@ pipeline {
         }
         failure {
             script {
-                githubChecks(
+                publishChecks(
                     status: 'COMPLETED',
                     conclusion: 'FAILURE',
                     checkName: 'ML Model Test',
