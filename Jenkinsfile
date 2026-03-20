@@ -17,7 +17,6 @@ pipeline {
                     credentialsId: 'github-token-id'
                 )
                 script {
-                    // Получаем SHA последнего коммита
                     env.GIT_COMMIT = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
                     echo "Current commit SHA: ${env.GIT_COMMIT}"
                 }
@@ -61,7 +60,8 @@ pipeline {
                     // Запуск скрипта и получение RMSE
                     def output = sh(script: ". $VENV/bin/activate && python model_testing.py", returnStdout: true).trim()
                     def rmseLine = output.split('\n').find { it.toLowerCase().contains('rmse') }
-                    def rmse = rmseLine?.split('=')[-1]?.trim() ?: "N/A"
+                    // исправляем split: теперь по двоеточию
+                    def rmse = rmseLine?.split(':')[-1]?.trim() ?: "N/A"
 
                     echo "Test RMSE: ${rmse}"
 
