@@ -3,9 +3,10 @@ pipeline {
 
     environment {
         VENV = ".venv"
-        GITHUB_REPO = 'mlops_1'               // имя репозитория
-        GITHUB_ACCOUNT = 'nikitasasniy'       // GitHub username
-        GITHUB_TOKEN = credentials('github-token-id') // Jenkins credentials ID с PAT
+        GITHUB_REPO = 'mlops_1'
+        GITHUB_ACCOUNT = 'nikitasasniy'
+        GITHUB_TOKEN = credentials('github-token-id')
+        REPORT_DIR = "reports"
     }
 
     stages {
@@ -36,56 +37,55 @@ pipeline {
             }
         }
 
-        stage('Data creation') {
+        stage('Data creation & preprocessing') {
             steps {
                 sh ". $VENV/bin/activate && python data_creation.py"
-            }
-        }
-
-        stage('Data preprocessing') {
-            steps {
                 sh ". $VENV/bin/activate && python data_preprocessing.py"
             }
         }
 
-        stage('Model training') {
+        stage('Model training & testing') {
             steps {
                 sh ". $VENV/bin/activate && python model_preparation.py"
+                sh ". $VENV/bin/activate && python model_testing.py > $REPORT_DIR/model_testing_output.txt"
             }
         }
 
-        stage('Model Testing') {
+        stage('Archive reports') {
+            steps {
+                // Сохраняем артефакты (метрики, графики)
+                archiveArtifacts artifacts: "${REPORT_DIR}/**", allowEmptyArchive: true
+            }
+        }
+
+        stage('Publish to GitHub') {
             steps {
                 script {
-                    // Запуск скрипта и получение RMSE
-                    def output = sh(script: ". $VENV/bin/activate && python model_testing.py", returnStdout: true).trim()
-                    def rmseLine = output.split('\n').find { it.toLowerCase().contains('rmse') }
-                    // исправляем split: теперь по двоеточию
-                    def rmse = rmseLine?.split(':')[-1]?.trim() ?: "N/A"
+                    // Собираем все отчеты и метрики в Markdown
+                    def reportFiles = sh(script: "ls ${REPORT_DIR}", returnStdout: true).trim().split("\n")
+                    def reportBody = "## ✅ Build Reports & Metrics\n\n"
+                    reportBody += "| File | Link |\n|---|---|\n"
+                    reportFiles.each { f ->
+                        reportBody += "| ${f} | [artifact](${env.BUILD_URL}artifact/${REPORT_DIR}/${f}) |\n"
+                    }
 
-                    echo "Test RMSE: ${rmse}"
-
-                    // Сохраняем как артефакт
-                    writeFile file: 'rmse.txt', text: rmse
-                    archiveArtifacts artifacts: 'rmse.txt', allowEmptyArchive: true
-
-                    // Публикация комментария на последний commit через GH API
+                    // Публикация комментария
                     withEnv(["GITHUB_TOKEN=${GITHUB_TOKEN}"]) {
-                        sh '''
+                        sh """
                         . $VENV/bin/activate
                         gh api repos/${GITHUB_ACCOUNT}/${GITHUB_REPO}/commits/${GIT_COMMIT}/comments \
                             -H "Authorization: token $GITHUB_TOKEN" \
-                            -f body="✅ Test RMSE: '${rmse}'"
-                        '''
+                            -f body="$reportBody"
+                        """
                     }
                 }
             }
         }
-    } // конец stages
+    }
 
     post {
         always {
-            echo "Pipeline finished. RMSE сохранён в rmse.txt и комментарий добавлен к последнему коммиту."
+            echo "Pipeline finished. Все отчеты и графики опубликованы в GitHub к последнему коммиту."
         }
     }
 }
