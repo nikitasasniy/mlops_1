@@ -18,13 +18,12 @@ pipeline {
                     )
                     script {
                         env.GIT_COMMIT = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
-                        echo "Commit: ${env.GIT_COMMIT}"
                     }
                 }
             }
         }
 
-        stage('Setup environment') {
+        stage('Setup') {
             steps {
                 withChecks(name: 'Setup', includeStage: true) {
                     sh '''
@@ -38,7 +37,7 @@ pipeline {
             }
         }
 
-        stage('Run pipeline') {
+        stage('ML Run') {
             steps {
                 withChecks(name: 'ML Run', includeStage: true) {
                     script {
@@ -48,32 +47,33 @@ pipeline {
                                 returnStdout: true
                             ).trim()
 
-                            echo output
-
-                            // ограничим размер (важно для GitHub Checks)
-                            env.PIPELINE_LOG = output.take(5000)
+                            env.PIPELINE_LOG = output.take(4000)
 
                             def matcher = (output =~ /rmse=([0-9.]+)/)
-                            if (matcher) {
-                                env.RMSE = matcher[0][1]
-                            } else {
-                                env.RMSE = "unknown"
-                            }
+                            env.RMSE = matcher ? matcher[0][1] : "unknown"
 
-                        } catch (err) {
-                            env.PIPELINE_LOG = "Error occurred during execution"
+                        } catch (e) {
                             env.RMSE = "error"
-                            error("Pipeline execution failed")
+                            env.PIPELINE_LOG = "Execution failed"
+                            error("ML step failed")
                         }
                     }
                 }
             }
         }
 
-        stage('Publish to GitHub Checks') {
+        stage('Publish Checks') {
             steps {
                 script {
-                    def conclusion = currentBuild.currentResult
+                    def rmseValue = (env.RMSE.isNumber()) ? env.RMSE.toFloat() : null
+
+                    // 🎯 quality gate
+                    def conclusion = 'SUCCESS'
+                    if (rmseValue == null) {
+                        conclusion = 'FAILURE'
+                    } else if (rmseValue > 1.0) {
+                        conclusion = 'UNSTABLE'
+                    }
 
                     publishChecks name: 'ML Pipeline',
                         title: "ML Pipeline Results",
@@ -81,10 +81,12 @@ pipeline {
                         text: """
 Commit: ${env.GIT_COMMIT}
 
-Results:
+RMSE: ${env.RMSE}
 
+Logs:
 ${env.PIPELINE_LOG}
 """,
+                        detailsURL: env.BUILD_URL,   // 🔥 важно (из гайда)
                         conclusion: conclusion
                 }
             }
@@ -96,22 +98,8 @@ ${env.PIPELINE_LOG}
             publishChecks name: 'ML Pipeline',
                 title: "ML Pipeline Failed",
                 summary: "Ошибка выполнения пайплайна",
-                text: "Смотри логи Jenkins",
+                detailsURL: env.BUILD_URL,
                 conclusion: 'FAILURE'
-        }
-
-        unstable {
-            publishChecks name: 'ML Pipeline',
-                title: "ML Pipeline Unstable",
-                summary: "Метрики хуже ожидаемых",
-                conclusion: 'NEUTRAL'
-        }
-
-        success {
-            publishChecks name: 'ML Pipeline',
-                title: "ML Pipeline Success",
-                summary: "RMSE: ${env.RMSE}",
-                conclusion: 'SUCCESS'
         }
     }
 }
