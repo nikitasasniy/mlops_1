@@ -3,8 +3,8 @@ pipeline {
 
     environment {
         VENV = ".venv"
-        GITHUB_REPO = 'mlops_1'              // имя репозитория
-        GITHUB_ACCOUNT = 'nikitasasniy'      // GitHub username
+        GITHUB_REPO = 'mlops_1'           // имя репозитория
+        GITHUB_ACCOUNT = 'nikitasasniy'   // GitHub username
         GITHUB_CREDENTIALS = 'github-token-id' // Jenkins credentials ID с PAT (Secret text)
     }
 
@@ -54,12 +54,13 @@ pipeline {
             }
         }
 
-        stage('Model Testing') {
+        stage('Model testing') {
             steps {
                 script {
+                    // Запускаем тест и парсим RMSE
                     def output = sh(script: ". $VENV/bin/activate && python model_testing.py", returnStdout: true).trim()
-                    def rmseLine = output.readLines().find { it.contains('rmse=') }
-                    def rmse = rmseLine?.split('=')[1]?.trim() ?: "N/A"
+                    def rmseLine = output.readLines().find { it.toLowerCase().contains('rmse') }
+                    def rmse = rmseLine?.split('=')[-1]?.trim() ?: "N/A"
                     echo "Test RMSE: ${rmse}"
 
                     env.RMSE = rmse
@@ -69,24 +70,18 @@ pipeline {
     }
 
     post {
-        success {
+        always {
             script {
-                // GitHub Checks Plugin
+                // Публикуем результат в GitHub Checks
                 publishChecks(
-                    name: 'ML Model Test',
+                    name: 'ML Model RMSE',
                     status: 'COMPLETED',
                     conclusion: 'SUCCESS',
-                    summary: "Test RMSE: ${env.RMSE}"
-                )
-            }
-        }
-        failure {
-            script {
-                publishChecks(
-                    name: 'ML Model Test',
-                    status: 'FAIL',
-                    conclusion: 'SUCCESS',
-                    summary: "Test RMSE: ${env.RMSE}"
+                    summary: "Test RMSE: ${env.RMSE}",
+                    commit: env.GIT_COMMIT,
+                    owner: env.GITHUB_ACCOUNT,
+                    repo: env.GITHUB_REPO,
+                    githubServer: 'GitHub' // имя настроенного GitHub сервера в Jenkins
                 )
             }
         }
