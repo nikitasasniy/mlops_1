@@ -48,22 +48,32 @@ pipeline {
             }
         }
 
-        stage('Model testing') {
+        stage('Model Testing') {
             steps {
-                sh '''
-                . $VENV/bin/activate
-                python model_testing.py
-                '''
+                script {
+                    // Запускаем скрипт и сохраняем вывод
+                    def output = sh(script: 'python lab1/model_testing.py', returnStdout: true).trim()
+                    echo "Raw output: ${output}"
+
+                    // Ищем rmse
+                    def matcher = output =~ /rmse=(\d+\.\d+)/
+                    def rmse = matcher ? matcher[0][1] : "N/A"
+                    echo "Model RMSE: ${rmse}"
+
+                    // Сохраняем для post
+                    currentBuild.description = "RMSE: ${rmse}"
+                }
             }
         }
     }
 
     post {
         success {
-            echo "Pipeline finished successfully"
+            // Отправка статуса в GitHub
+            githubNotify context: 'ML Model Test', status: 'SUCCESS', description: "RMSE: ${rmse}"
         }
         failure {
-            echo "Pipeline failed"
+            githubNotify context: 'ML Model Test', status: 'FAILURE', description: "Pipeline failed"
         }
     }
 }
