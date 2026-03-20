@@ -3,9 +3,9 @@ pipeline {
 
     environment {
         VENV = ".venv"
-        GITHUB_REPO = 'mlops_1'               // имя репозитория
-        GITHUB_ACCOUNT = 'nikitasasniy'       // GitHub username
-        GITHUB_TOKEN = credentials('github-token-id') // Jenkins credentials ID с PAT
+        GITHUB_REPO = 'mlops_1'
+        GITHUB_ACCOUNT = 'nikitasasniy'
+        GITHUB_TOKEN = credentials('github-token-id')
     }
 
     stages {
@@ -17,7 +17,6 @@ pipeline {
                     credentialsId: 'github-token-id'
                 )
                 script {
-                    // Получаем SHA последнего коммита
                     env.GIT_COMMIT = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
                     echo "Current commit SHA: ${env.GIT_COMMIT}"
                 }
@@ -61,12 +60,12 @@ pipeline {
                     def output = sh(script: ". $VENV/bin/activate && python model_testing.py", returnStdout: true).trim()
                     def rmseLine = output.split('\n').find { it.toLowerCase().contains('rmse') }
                     def rmse = rmseLine?.split('=')[-1]?.trim() ?: "N/A"
-        
+
                     echo "Test RMSE: ${rmse}"
-        
+
                     writeFile file: 'rmse.txt', text: rmse
                     archiveArtifacts artifacts: 'rmse.txt', allowEmptyArchive: true
-        
+
                     // Публикация безопасно через withEnv
                     withEnv(["GITHUB_TOKEN=${GITHUB_TOKEN}"]) {
                         sh '''
@@ -78,10 +77,11 @@ pipeline {
                 }
             }
         }
+    } // конец stages
 
     post {
         always {
             echo "Pipeline finished. RMSE сохранён в rmse.txt и комментарий добавлен к последнему коммиту."
         }
     }
-}
+} // конец pipeline
