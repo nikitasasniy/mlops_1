@@ -3,9 +3,9 @@ pipeline {
 
     environment {
         VENV = ".venv"
-        GITHUB_REPO = 'mlops_1'              // имя репозитория
-        GITHUB_ACCOUNT = 'nikitasasniy'      // GitHub username
-        GITHUB_CREDENTIALS = 'github-token-id' // Jenkins credentials ID с PAT (Secret text)
+        GITHUB_REPO = 'mlops_1'               // имя репозитория
+        GITHUB_ACCOUNT = 'nikitasasniy'       // GitHub username
+        GITHUB_TOKEN = credentials('github-token-id') // Jenkins credentials ID с PAT
     }
 
     stages {
@@ -14,9 +14,10 @@ pipeline {
                 git(
                     url: "https://github.com/${env.GITHUB_ACCOUNT}/${env.GITHUB_REPO}.git",
                     branch: 'main',
-                    credentialsId: env.GITHUB_CREDENTIALS
+                    credentialsId: 'github-token-id'
                 )
                 script {
+                    // Получаем SHA последнего коммита
                     env.GIT_COMMIT = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
                     echo "Current commit SHA: ${env.GIT_COMMIT}"
                 }
@@ -68,16 +69,12 @@ pipeline {
                     writeFile file: 'rmse.txt', text: rmse
                     archiveArtifacts artifacts: 'rmse.txt', allowEmptyArchive: true
 
-                    // Публикация на GitHub через gh CLI, если указан PR
-                    if (env.PR_NUMBER?.trim()) {
-                        sh """
-                        . $VENV/bin/activate
-                        echo $GITHUB_TOKEN | gh auth login --with-token
-                        gh pr comment $PR_NUMBER --body "✅ Test RMSE: ${rmse}"
-                        """
-                    } else {
-                        echo "PR_NUMBER не указан, комментарий на GitHub не отправляется."
-                    }
+                    // Публикация комментария на последний commit
+                    sh """
+                    . $VENV/bin/activate
+                    echo $GITHUB_TOKEN | gh auth login --with-token
+                    gh api repos/${GITHUB_ACCOUNT}/${GITHUB_REPO}/commits/${GIT_COMMIT}/comments -f body="✅ Test RMSE: ${rmse}"
+                    """
                 }
             }
         }
@@ -85,7 +82,7 @@ pipeline {
 
     post {
         always {
-            echo "Pipeline finished. RMSE сохранён в rmse.txt"
+            echo "Pipeline finished. RMSE сохранён в rmse.txt и комментарий добавлен к последнему коммиту."
         }
     }
 }
