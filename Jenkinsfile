@@ -69,12 +69,13 @@ pipeline {
                     writeFile file: 'rmse.txt', text: rmse
                     archiveArtifacts artifacts: 'rmse.txt', allowEmptyArchive: true
 
-                    // Публикация комментария на последний commit через безопасное окружение
+                    // Публикация комментария на последний commit через GH API
                     withEnv(["GITHUB_TOKEN=${GITHUB_TOKEN}"]) {
                         sh '''
                         . $VENV/bin/activate
-                        echo $GITHUB_TOKEN | gh auth login --with-token
-                        gh api repos/${GITHUB_ACCOUNT}/${GITHUB_REPO}/commits/${GIT_COMMIT}/comments -f body="✅ Test RMSE: '${rmse}'"
+                        gh api repos/${GITHUB_ACCOUNT}/${GITHUB_REPO}/commits/${GIT_COMMIT}/comments \
+                            -H "Authorization: token $GITHUB_TOKEN" \
+                            -f body="✅ Test RMSE: '${rmse}'"
                         '''
                     }
                 }
@@ -87,4 +88,4 @@ pipeline {
             echo "Pipeline finished. RMSE сохранён в rmse.txt и комментарий добавлен к последнему коммиту."
         }
     }
-} // конец pipeline
+}
