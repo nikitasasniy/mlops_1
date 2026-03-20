@@ -58,27 +58,26 @@ pipeline {
         stage('Model Testing') {
             steps {
                 script {
-                    // Запуск скрипта и получение RMSE
                     def output = sh(script: ". $VENV/bin/activate && python model_testing.py", returnStdout: true).trim()
                     def rmseLine = output.split('\n').find { it.toLowerCase().contains('rmse') }
                     def rmse = rmseLine?.split('=')[-1]?.trim() ?: "N/A"
-
+        
                     echo "Test RMSE: ${rmse}"
-
-                    // Сохраняем как артефакт
+        
                     writeFile file: 'rmse.txt', text: rmse
                     archiveArtifacts artifacts: 'rmse.txt', allowEmptyArchive: true
-
-                    // Публикация комментария на последний commit
-                    sh """
-                    . $VENV/bin/activate
-                    echo $GITHUB_TOKEN | gh auth login --with-token
-                    gh api repos/${GITHUB_ACCOUNT}/${GITHUB_REPO}/commits/${GIT_COMMIT}/comments -f body="✅ Test RMSE: ${rmse}"
-                    """
+        
+                    // Публикация безопасно через withEnv
+                    withEnv(["GITHUB_TOKEN=${GITHUB_TOKEN}"]) {
+                        sh '''
+                        . $VENV/bin/activate
+                        gh auth login --with-token
+                        gh api repos/${GITHUB_ACCOUNT}/${GITHUB_REPO}/commits/${GIT_COMMIT}/comments -f body="✅ Test RMSE: '${rmse}'"
+                        '''
+                    }
                 }
             }
         }
-    }
 
     post {
         always {
