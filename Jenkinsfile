@@ -2,24 +2,27 @@ pipeline {
     agent any
 
     environment {
-        VENV = ".venv"
-        GITHUB_REPO = 'mlops_1'
-        GITHUB_ACCOUNT = 'nikitasasniy'
-        GITHUB_CREDENTIALS = 'github-token-id'
+        VENV = ".venv"                         // путь к виртуальному окружению
+        GITHUB_REPO = 'nikitasasniy/mlops_1'  // твой репозиторий
+        GITHUB_ACCOUNT = 'nikitasasniy'       // GitHub username/organization
+        GITHUB_CREDENTIALS = 'github-token-id' // Jenkins credentials ID с PAT
     }
 
     stages {
 
         stage('Checkout') {
             steps {
-                // Чистый checkout репозитория с ветки main
                 git(
                     url: 'https://github.com/nikitasasniy/mlops_1.git',
                     branch: 'main',
-                    credentialsId: env.GITHUB_CREDENTIALS,
-                    name: 'origin',
-                    refspec: '+refs/heads/main:refs/remotes/origin/main'
+                    credentialsId: env.GITHUB_CREDENTIALS
                 )
+
+                // Получаем SHA текущего коммита
+                script {
+                    env.GIT_COMMIT = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+                    echo "Current commit SHA: ${env.GIT_COMMIT}"
+                }
             }
         }
 
@@ -57,16 +60,13 @@ pipeline {
         stage('Model Testing') {
             steps {
                 script {
-                    // Запуск теста и получение RMSE
                     def output = sh(script: ". $VENV/bin/activate && python model_testing.py", returnStdout: true).trim()
                     def rmseLine = output.readLines().find { it.contains('rmse=') }
                     def rmse = rmseLine?.split('=')[1]?.trim() ?: "N/A"
                     echo "Test RMSE: ${rmse}"
 
+                    // Сохраняем RMSE в environment, чтобы использовать в post
                     env.RMSE = rmse
-
-                    // Получаем SHA коммита для githubNotify
-                    env.GIT_COMMIT = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
                 }
             }
         }
@@ -74,7 +74,7 @@ pipeline {
         stage('Check credentials') {
             steps {
                 script {
-                    echo "Using credentials ID: ${env.GITHUB_CREDENTIALS}"
+                    echo "Credentials ID: ${env.GITHUB_CREDENTIALS}"
                 }
             }
         }
