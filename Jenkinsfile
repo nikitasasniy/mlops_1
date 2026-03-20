@@ -3,8 +3,8 @@ pipeline {
 
     environment {
         VENV = ".venv"
-        GITHUB_REPO = 'mlops_1'           // имя репозитория
-        GITHUB_ACCOUNT = 'nikitasasniy'   // GitHub username
+        GITHUB_REPO = 'mlops_1'              // имя репозитория
+        GITHUB_ACCOUNT = 'nikitasasniy'      // GitHub username
         GITHUB_CREDENTIALS = 'github-token-id' // Jenkins credentials ID с PAT (Secret text)
     }
 
@@ -54,13 +54,13 @@ pipeline {
             }
         }
 
-        stage('Model testing') {
+        stage('Model Testing') {
             steps {
                 script {
-                    // Запускаем тест и парсим RMSE
+                    // Запуск теста и получение RMSE
                     def output = sh(script: ". $VENV/bin/activate && python model_testing.py", returnStdout: true).trim()
                     def rmseLine = output.readLines().find { it.toLowerCase().contains('rmse') }
-                    def rmse = rmseLine?.split('=')[-1]?.trim() ?: "N/A"
+                    def rmse = rmseLine?.split('=')[1]?.trim() ?: "N/A"
                     echo "Test RMSE: ${rmse}"
 
                     env.RMSE = rmse
@@ -72,16 +72,12 @@ pipeline {
     post {
         always {
             script {
-                // Публикуем результат в GitHub Checks
+                // Публикуем RMSE в GitHub Checks
                 publishChecks(
                     name: 'ML Model RMSE',
                     status: 'COMPLETED',
                     conclusion: 'SUCCESS',
-                    summary: "Test RMSE: ${env.RMSE}",
-                    commit: env.GIT_COMMIT,
-                    owner: env.GITHUB_ACCOUNT,
-                    repo: env.GITHUB_REPO,
-                    githubServer: 'GitHub' // имя настроенного GitHub сервера в Jenkins
+                    summary: "Test RMSE: ${env.RMSE}"
                 )
             }
         }
