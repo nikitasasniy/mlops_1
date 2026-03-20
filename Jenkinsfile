@@ -51,24 +51,45 @@ pipeline {
         }
 
         stage('Model Testing') {
-            steps {
-                 script {
-                     def output = sh(script: ". $VENV/bin/activate && python model_testing.py", returnStdout: true).trim()
-                    def rmseLine = output.readLines().find { it.contains('rmse=') }
-                    def rmse = rmseLine?.split('=')[1]?.trim() ?: "N/A"
-                    echo "Test RMSE: ${rmse}"
-                }
-            }
+    steps {
+        script {
+            // Запуск теста и получение RMSE
+            def output = sh(script: ". $VENV/bin/activate && python model_testing.py", returnStdout: true).trim()
+            def rmseLine = output.readLines().find { it.contains('rmse=') }
+            def rmse = rmseLine?.split('=')[1]?.trim() ?: "N/A"
+            echo "Test RMSE: ${rmse}"
+
+            // Сохраняем RMSE в environment, чтобы использовать в post
+            env.RMSE = rmse
         }
     }
+}
 
-    post {
-        success {
-            // отправка статуса и RMSE в GitHub
-            githubNotify context: 'ML Model Test', status: 'SUCCESS', description: "RMSE: ${env.RMSE}"
+post {
+    success {
+        script {
+            githubNotify(
+                context: 'ML Model Test',
+                status: 'SUCCESS',
+                description: "RMSE: ${env.RMSE}",
+                repo: 'user/repo',                 // замени на свой репозиторий
+                account: 'github-account',         // твой GitHub username/organization
+                credentialsId: 'github-token-id',  // ID твоего токена в Jenkins
+                sha: env.GIT_COMMIT                 // текущий коммит
+            )
         }
-        failure {
-            githubNotify context: 'ML Model Test', status: 'FAILURE', description: "Pipeline failed"
+    }
+    failure {
+        script {
+            githubNotify(
+                context: 'ML Model Test',
+                status: 'FAILURE',
+                description: "Pipeline failed",
+                repo: 'user/repo',
+                account: 'github-account',
+                credentialsId: 'github-token-id',
+                sha: env.GIT_COMMIT
+            )
         }
     }
 }
