@@ -30,6 +30,7 @@ def main():
     rmse = root_mean_squared_error(y_test, y_pred)
 
     print(f"RMSE is: {rmse:.4f}")
+    print(f"rmse={rmse:.4f}")  # Для Jenkins
 
 if __name__ == "__main__":
     main()
