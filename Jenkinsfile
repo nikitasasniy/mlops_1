@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        VENV = ".venv"
+        VENV = ".venv"  // путь к виртуальному окружению
     }
 
     stages {
@@ -10,10 +10,12 @@ pipeline {
         stage('Setup environment') {
             steps {
                 sh '''
+                # создаём venv, если нет
                 if [ ! -d "$VENV" ]; then
                     python3 -m venv $VENV
                 fi
 
+                # активируем venv и устанавливаем зависимости
                 . $VENV/bin/activate
                 pip install --upgrade pip --quiet
                 pip install -r req.txt --quiet
@@ -51,17 +53,18 @@ pipeline {
         stage('Model Testing') {
             steps {
                 script {
-                    // Запускаем скрипт и сохраняем вывод
+                    // запускаем скрипт и сохраняем вывод
                     def output = sh(script: 'python lab1/model_testing.py', returnStdout: true).trim()
                     echo "Raw output: ${output}"
 
-                    // Ищем rmse
+                    // извлекаем RMSE
                     def matcher = output =~ /rmse=(\d+\.\d+)/
-                    def rmse = matcher ? matcher[0][1] : "N/A"
-                    echo "Model RMSE: ${rmse}"
+                    def rmseValue = matcher ? matcher[0][1] : "N/A"
+                    echo "Model RMSE: ${rmseValue}"
 
-                    // Сохраняем для post
-                    currentBuild.description = "RMSE: ${rmse}"
+                    // сохраняем для post и description
+                    env.RMSE = rmseValue
+                    currentBuild.description = "RMSE: ${rmseValue}"
                 }
             }
         }
@@ -69,8 +72,8 @@ pipeline {
 
     post {
         success {
-            // Отправка статуса в GitHub
-            githubNotify context: 'ML Model Test', status: 'SUCCESS', description: "RMSE: ${rmse}"
+            // отправка статуса и RMSE в GitHub
+            githubNotify context: 'ML Model Test', status: 'SUCCESS', description: "RMSE: ${env.RMSE}"
         }
         failure {
             githubNotify context: 'ML Model Test', status: 'FAILURE', description: "Pipeline failed"
