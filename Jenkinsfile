@@ -3,8 +3,8 @@ pipeline {
 
     environment {
         VENV = ".venv"
-        GITHUB_REPO = 'mlops_1'               // имя репозитория
-        GITHUB_ACCOUNT = 'nikitasasniy'       // GitHub username
+        GITHUB_REPO = 'mlops_1'
+        GITHUB_ACCOUNT = 'nikitasasniy'
     }
 
     stages {
@@ -19,7 +19,6 @@ pipeline {
                     ]]
                 ])
                 script {
-                    // SHA последнего коммита
                     env.GIT_COMMIT = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
                     echo "Current commit SHA: ${env.GIT_COMMIT}"
                 }
@@ -65,14 +64,18 @@ pipeline {
         stage('Publish to GitHub') {
             steps {
                 withCredentials([string(credentialsId: 'github-token-id', variable: 'GITHUB_TOKEN')]) {
+                    // Здесь токен НЕ подставляется в GString, а shell сам использует переменную
                     sh '''
-                    echo "$GITHUB_TOKEN" | gh auth login --with-token
-                    gh api repos/${GITHUB_ACCOUNT}/${GITHUB_REPO}/commits/${GIT_COMMIT}/comments \
-                        -f body="✅ Jenkins build finished successfully. Reports archived: [Jenkins workspace](file://$PWD/reports)"
+                    curl -s -X POST \
+                        -H "Authorization: token $GITHUB_TOKEN" \
+                        -H "Accept: application/vnd.github+json" \
+                        https://api.github.com/repos/${GITHUB_ACCOUNT}/${GITHUB_REPO}/commits/${GIT_COMMIT}/comments \
+                        -d '{"body":"✅ Jenkins build finished successfully. Все отчеты в reports/"}'
                     '''
                 }
             }
         }
+
     }
 
     post {
