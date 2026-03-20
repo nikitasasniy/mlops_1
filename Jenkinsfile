@@ -73,28 +73,20 @@ pipeline {
             script {
                 // GitHub Checks Plugin
                 publishChecks(
+                    name: 'ML Model Test',
                     status: 'COMPLETED',
                     conclusion: 'SUCCESS',
-                    checkName: 'ML Model Test',
-                    description: "Test RMSE: ${env.RMSE}",
-                    githubCredentialsId: env.GITHUB_CREDENTIALS,
-                    commit: env.GIT_COMMIT,
-                    repo: env.GITHUB_REPO,
-                    owner: env.GITHUB_ACCOUNT
+                    summary: "Test RMSE: ${env.RMSE}"
                 )
             }
         }
         failure {
             script {
                 publishChecks(
-                    status: 'COMPLETED',
-                    conclusion: 'FAILURE',
-                    checkName: 'ML Model Test',
-                    description: "Pipeline failed",
-                    githubCredentialsId: env.GITHUB_CREDENTIALS,
-                    commit: env.GIT_COMMIT,
-                    repo: env.GITHUB_REPO,
-                    owner: env.GITHUB_ACCOUNT
+                    name: 'ML Model Test',
+                    status: 'FAIL',
+                    conclusion: 'SUCCESS',
+                    summary: "Test RMSE: ${env.RMSE}"
                 )
             }
         }
