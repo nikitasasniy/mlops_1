@@ -53,6 +53,13 @@ pipeline {
                 }
             }
         }
+        stage('Check credentials') {
+            steps {
+                script {
+                    echo "Credentials ID: ${env.GITHUB_CREDENTIALS}"
+        }
+    }
+}
     }
 
     post {
