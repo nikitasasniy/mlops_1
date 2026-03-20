@@ -76,7 +76,9 @@ pipeline {
                             name: 'ML Model RMSE',
                             status: 'COMPLETED',
                             conclusion: 'SUCCESS',
-                            summary: "Test RMSE: ${rmse}"
+                            summary: "Test RMSE: ${rmse}",
+                            commitSha: env.GIT_COMMIT,
+                            githubCredentialsId: env.GITHUB_CREDENTIALS
                         )
                     } catch (err) {
                         echo "publishChecks недоступен или не настроен: ${err}"
