@@ -57,31 +57,26 @@ pipeline {
         stage('Model Testing') {
             steps {
                 script {
-                    // Запуск скрипта тестирования модели и получение вывода
+                    // Запуск скрипта и получение RMSE
                     def output = sh(script: ". $VENV/bin/activate && python model_testing.py", returnStdout: true).trim()
-
-                    // Извлекаем строку с RMSE
                     def rmseLine = output.split('\n').find { it.toLowerCase().contains('rmse') }
                     def rmse = rmseLine?.split('=')[-1]?.trim() ?: "N/A"
 
                     echo "Test RMSE: ${rmse}"
 
-                    // Сохраняем RMSE в файл как артефакт на всякий случай
+                    // Сохраняем как артефакт
                     writeFile file: 'rmse.txt', text: rmse
                     archiveArtifacts artifacts: 'rmse.txt', allowEmptyArchive: true
 
-                    // Публикация через GitHub Checks, если плагин доступен
-                    try {
-                        publishChecks(
-                            name: 'ML Model RMSE',
-                            status: 'COMPLETED',
-                            conclusion: 'SUCCESS',
-                            summary: "Test RMSE: ${rmse}",
-                            commitSha: env.GIT_COMMIT,
-                            githubCredentialsId: env.GITHUB_CREDENTIALS
-                        )
-                    } catch (err) {
-                        echo "publishChecks недоступен или не настроен: ${err}"
+                    // Публикация на GitHub через gh CLI, если указан PR
+                    if (env.PR_NUMBER?.trim()) {
+                        sh """
+                        . $VENV/bin/activate
+                        echo $GITHUB_TOKEN | gh auth login --with-token
+                        gh pr comment $PR_NUMBER --body "✅ Test RMSE: ${rmse}"
+                        """
+                    } else {
+                        echo "PR_NUMBER не указан, комментарий на GitHub не отправляется."
                     }
                 }
             }
