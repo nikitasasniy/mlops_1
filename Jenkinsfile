@@ -10,50 +10,61 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git(
-                    url: "https://github.com/${env.GITHUB_ACCOUNT}/${env.GITHUB_REPO}.git",
-                    branch: 'main',
-                    credentialsId: 'github-token-id'
-                )
-                script {
-                    env.GIT_COMMIT = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
-                    echo "Commit: ${env.GIT_COMMIT}"
+                withChecks(name: 'Checkout', includeStage: true) {
+                    git(
+                        url: "https://github.com/${env.GITHUB_ACCOUNT}/${env.GITHUB_REPO}.git",
+                        branch: 'main',
+                        credentialsId: 'github-token-id'
+                    )
+                    script {
+                        env.GIT_COMMIT = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+                        echo "Commit: ${env.GIT_COMMIT}"
+                    }
                 }
             }
         }
 
         stage('Setup environment') {
             steps {
-                sh '''
-                if [ ! -d "$VENV" ]; then
-                    python3 -m venv $VENV
-                fi
-                . $VENV/bin/activate && pip install --upgrade pip --quiet
-                . $VENV/bin/activate && pip install -r req.txt --quiet
-                '''
+                withChecks(name: 'Setup', includeStage: true) {
+                    sh '''
+                    if [ ! -d "$VENV" ]; then
+                        python3 -m venv $VENV
+                    fi
+                    . $VENV/bin/activate && pip install --upgrade pip --quiet
+                    . $VENV/bin/activate && pip install -r req.txt --quiet
+                    '''
+                }
             }
         }
 
         stage('Run pipeline') {
             steps {
-                script {
-                    def output = sh(
-                        script: ". $VENV/bin/activate && python model_preparation.py && python model_testing.py",
-                        returnStdout: true
-                    ).trim()
+                withChecks(name: 'ML Run', includeStage: true) {
+                    script {
+                        try {
+                            def output = sh(
+                                script: ". $VENV/bin/activate && python model_preparation.py && python model_testing.py",
+                                returnStdout: true
+                            ).trim()
 
-                    echo output
+                            echo output
 
-                    // сохраняем вывод для GitHub Checks
-                    env.PIPELINE_LOG = output
+                            // ограничим размер (важно для GitHub Checks)
+                            env.PIPELINE_LOG = output.take(5000)
 
-                    // пробуем вытащить RMSE
-                    def matcher = (output =~ /rmse=([0-9.]+)/)
-                    if (matcher) {
-                        env.RMSE = matcher[0][1]
-                        echo "Parsed RMSE: ${env.RMSE}"
-                    } else {
-                        env.RMSE = "unknown"
+                            def matcher = (output =~ /rmse=([0-9.]+)/)
+                            if (matcher) {
+                                env.RMSE = matcher[0][1]
+                            } else {
+                                env.RMSE = "unknown"
+                            }
+
+                        } catch (err) {
+                            env.PIPELINE_LOG = "Error occurred during execution"
+                            env.RMSE = "error"
+                            error("Pipeline execution failed")
+                        }
                     }
                 }
             }
@@ -61,17 +72,21 @@ pipeline {
 
         stage('Publish to GitHub Checks') {
             steps {
-                publishChecks name: 'ML Pipeline',
-                    title: "ML Pipeline Results",
-                    summary: "RMSE: ${env.RMSE}",
-                    text: """
-                    Commit: ${env.GIT_COMMIT}
+                script {
+                    def conclusion = currentBuild.currentResult
 
-                    Результаты пайплайна:
+                    publishChecks name: 'ML Pipeline',
+                        title: "ML Pipeline Results",
+                        summary: "RMSE: ${env.RMSE}",
+                        text: """
+Commit: ${env.GIT_COMMIT}
 
-                    ${env.PIPELINE_LOG}
-                    """,
-                    conclusion: 'SUCCESS'
+Results:
+
+${env.PIPELINE_LOG}
+""",
+                        conclusion: conclusion
+                }
             }
         }
     }
@@ -92,8 +107,11 @@ pipeline {
                 conclusion: 'NEUTRAL'
         }
 
-        always {
-            echo "Pipeline finished"
+        success {
+            publishChecks name: 'ML Pipeline',
+                title: "ML Pipeline Success",
+                summary: "RMSE: ${env.RMSE}",
+                conclusion: 'SUCCESS'
         }
     }
 }
