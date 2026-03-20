@@ -54,8 +54,7 @@ pipeline {
             steps {
                  script {
                     def output = sh(script: '''
-                        . "$VENV/bin/activate"
-                        python3 "lab1/model_testing.py"
+                        . $VENV/bin/activate python model_testing.py
                     ''', returnStdout: true).trim()
         
                     echo "Raw output: ${output}"
