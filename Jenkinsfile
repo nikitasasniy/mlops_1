@@ -5,7 +5,6 @@ pipeline {
         VENV = ".venv"
         GITHUB_REPO = 'mlops_1'
         GITHUB_ACCOUNT = 'nikitasasniy'
-        GITHUB_TOKEN = credentials('github-token-id')
         REPORT_DIR = "reports"
     }
 
@@ -13,7 +12,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 git(
-                    url: "https://github.com/${env.GITHUB_ACCOUNT}/${env.GITHUB_REPO}.git",
+                    url: "https://github.com/${env.GITHUB_ACCOUNT}/${GITHUB_REPO}.git",
                     branch: 'main',
                     credentialsId: 'github-token-id'
                 )
@@ -44,39 +43,53 @@ pipeline {
             }
         }
 
-        stage('Model training & testing') {
+        stage('Model training') {
             steps {
                 sh ". $VENV/bin/activate && python model_preparation.py"
-                sh ". $VENV/bin/activate && python model_testing.py > $REPORT_DIR/model_testing_output.txt"
             }
         }
 
-        stage('Archive reports') {
+        stage('Model testing & reporting') {
             steps {
-                // Сохраняем артефакты (метрики, графики)
-                archiveArtifacts artifacts: "${REPORT_DIR}/**", allowEmptyArchive: true
+                script {
+                    // Создаем папку для отчетов заранее
+                    sh "mkdir -p ${REPORT_DIR}"
+
+                    // Запуск тестирования и сохранение stdout
+                    def output = sh(script: ". $VENV/bin/activate && python model_testing.py", returnStdout: true).trim()
+                    writeFile file: "${REPORT_DIR}/model_testing_output.txt", text: output
+
+                    // Парсинг RMSE
+                    def rmseLine = output.split('\n').find { it.toLowerCase().contains('rmse') }
+                    def rmse = rmseLine?.split(':')[-1]?.trim() ?: "N/A"
+                    writeFile file: "${REPORT_DIR}/rmse.txt", text: rmse
+
+                    echo "Test RMSE: ${rmse}"
+
+                    // Архивируем все отчеты и графики
+                    archiveArtifacts artifacts: "${REPORT_DIR}/**", allowEmptyArchive: true
+                }
             }
         }
 
         stage('Publish to GitHub') {
             steps {
-                script {
-                    // Собираем все отчеты и метрики в Markdown
-                    def reportFiles = sh(script: "ls ${REPORT_DIR}", returnStdout: true).trim().split("\n")
-                    def reportBody = "## ✅ Build Reports & Metrics\n\n"
-                    reportBody += "| File | Link |\n|---|---|\n"
-                    reportFiles.each { f ->
-                        reportBody += "| ${f} | [artifact](${env.BUILD_URL}artifact/${REPORT_DIR}/${f}) |\n"
-                    }
+                withCredentials([string(credentialsId: 'github-token-id', variable: 'GITHUB_TOKEN')]) {
+                    script {
+                        // Собираем все отчеты и метрики в Markdown
+                        def reportFiles = sh(script: "ls ${REPORT_DIR}", returnStdout: true).trim().split("\n")
+                        def reportBody = "## ✅ Build Reports & Metrics\n\n"
+                        reportBody += "| File | Link |\n|---|---|\n"
+                        reportFiles.each { f ->
+                            reportBody += "| ${f} | [artifact](${env.BUILD_URL}artifact/${REPORT_DIR}/${f}) |\n"
+                        }
 
-                    // Публикация комментария
-                    withEnv(["GITHUB_TOKEN=${GITHUB_TOKEN}"]) {
-                        sh """
-                        . $VENV/bin/activate
+                        // Публикация комментария на последний коммит через GH API
+                        sh '''
                         gh api repos/${GITHUB_ACCOUNT}/${GITHUB_REPO}/commits/${GIT_COMMIT}/comments \
-                            -H "Authorization: token $GITHUB_TOKEN" \
-                            -f body="$reportBody"
-                        """
+                          -H "Authorization: token $GITHUB_TOKEN" \
+                          -f body="$reportBody"
+                        '''
                     }
                 }
             }
