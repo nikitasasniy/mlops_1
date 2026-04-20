@@ -3,4 +3,5 @@
 *переходим в корень репозитория, пишем chmod +x pipeline.sh*
 
 **запускаем pipeline.sh**
+test
 
