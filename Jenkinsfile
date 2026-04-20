@@ -20,12 +20,14 @@ pipeline {
 
                         sh '''
                         set -e
-
+                        
                         VENV=.venv
                         
                         if [ ! -d "$VENV" ]; then
                             python3 -m venv $VENV
                         fi
+                        
+                        $VENV/bin/python -m ensurepip --upgrade
                         
                         $VENV/bin/python -m pip install --upgrade pip --quiet
                         $VENV/bin/pip install -r req.txt --quiet
