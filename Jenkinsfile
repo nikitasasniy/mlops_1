@@ -8,81 +8,74 @@ pipeline {
     }
 
     stages {
+
+        stage('Checkout') {
+            steps {
+                git(
+                    url: "https://github.com/${env.GITHUB_ACCOUNT}/${env.GITHUB_REPO}.git",
+                    branch: 'main',
+                    credentialsId: 'github-token-id'
+                )
+            }
+        }
+
         stage('Setup Environment') {
             steps {
-                withChecks(name: 'Setup', includeStage: true) {
-                    script {
-                        git(
-                            url: "https://github.com/${env.GITHUB_ACCOUNT}/${env.GITHUB_REPO}.git",
-                            branch: 'main',
-                            credentialsId: 'github-token-id'
-                        )
+                sh '''
+                set -e
 
-                        sh '''
-                        set -e
-                        
-                        VENV=.venv
-                        
-                        if [ ! -d "$VENV" ]; then
-                            python3 -m venv $VENV
-                        fi
-                        
-                        $VENV/bin/python -m ensurepip --upgrade
-                        
-                        $VENV/bin/python -m pip install --upgrade pip --quiet
-                        $VENV/bin/pip install -r req.txt --quiet
-                        '''
-                    }
-                }
+                VENV=".venv"
+
+                python3 -m venv $VENV
+
+                $VENV/bin/python -m ensurepip --upgrade || true
+                $VENV/bin/python -m pip install --upgrade pip
+
+                $VENV/bin/pip install -r req.txt
+                '''
             }
         }
 
         stage('Data Creation') {
             steps {
-                withChecks(name: 'Data Creation', includeStage: true) {
-                    sh ". $VENV/bin/activate && python data_creation.py"
-                }
+                sh '''
+                set -e
+                .venv/bin/python data_creation.py
+                '''
             }
         }
 
         stage('Data Preprocessing') {
             steps {
-                withChecks(name: 'Data Preprocessing', includeStage: true) {
-                    sh ". $VENV/bin/activate && python data_preprocessing.py"
-                }
+                sh '''
+                set -e
+                .venv/bin/python data_preprocessing.py
+                '''
             }
         }
 
         stage('Model Preparation') {
             steps {
-                withChecks(name: 'Model Preparation', includeStage: true) {
-                    sh ". $VENV/bin/activate && python model_preparation.py"
-                }
+                sh '''
+                set -e
+                .venv/bin/python model_preparation.py
+                '''
             }
         }
 
         stage('Model Testing') {
             steps {
-                withChecks(name: 'Model Testing', includeStage: true) {
-                    script {
-                        try {
-                            def output = sh(
-                                script: ". $VENV/bin/activate && python model_testing.py",
-                                returnStdout: true
-                            ).trim()
+                script {
+                    def output = sh(
+                        script: '.venv/bin/python model_testing.py',
+                        returnStdout: true
+                    ).trim()
 
-                            echo output
-                            env.PIPELINE_LOG = output.take(4000)
+                    echo output
+                    env.PIPELINE_LOG = output.take(4000)
 
-                            def matcher = (output =~ /rmse=([0-9.]+)/)
-                            env.RMSE = matcher ? matcher[0][1] : "unknown"
-
-                        } catch (e) {
-                            env.RMSE = "error"
-                            env.PIPELINE_LOG = "Execution failed"
-                            error("Model Testing failed")
-                        }
-                    }
+                    def matcher = (output =~ /rmse=([0-9.]+)/)
+                    env.RMSE = matcher ? matcher[0][1] : "unknown"
                 }
             }
         }
@@ -100,9 +93,9 @@ pipeline {
                     }
 
                     publishChecks name: 'ML Pipeline',
-                                  title: "ML Pipeline Results",
-                                  summary: "RMSE: ${env.RMSE}",
-                                  text: """
+                        title: "ML Pipeline Results",
+                        summary: "RMSE: ${env.RMSE}",
+                        text: """
 Commit: ${env.GIT_COMMIT ?: 'unknown'}
 
 RMSE: ${env.RMSE}
@@ -110,8 +103,8 @@ RMSE: ${env.RMSE}
 Logs:
 ${env.PIPELINE_LOG}
 """,
-                                  detailsURL: env.BUILD_URL,
-                                  conclusion: conclusion
+                        detailsURL: env.BUILD_URL,
+                        conclusion: conclusion
                 }
             }
         }
@@ -120,10 +113,10 @@ ${env.PIPELINE_LOG}
     post {
         failure {
             publishChecks name: 'ML Pipeline',
-                          title: "ML Pipeline Failed",
-                          summary: "Ошибка выполнения пайплайна",
-                          detailsURL: env.BUILD_URL,
-                          conclusion: 'FAILURE'
+                title: "ML Pipeline Failed",
+                summary: "Ошибка выполнения пайплайна",
+                detailsURL: env.BUILD_URL,
+                conclusion: 'FAILURE'
         }
     }
 }
