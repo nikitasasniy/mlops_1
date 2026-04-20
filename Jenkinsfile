@@ -19,10 +19,16 @@ pipeline {
                         )
 
                         sh '''
-                        if [ ! -d ".venv" ]; then python3 -m venv .venv; fi
-                        . .venv/bin/activate
-                        pip install --upgrade pip --quiet
-                        pip install -r req.txt --quiet
+                        set -e
+
+                        VENV=.venv
+                        
+                        if [ ! -d "$VENV" ]; then
+                            python3 -m venv $VENV
+                        fi
+                        
+                        $VENV/bin/python -m pip install --upgrade pip --quiet
+                        $VENV/bin/pip install -r req.txt --quiet
                         '''
                     }
                 }
