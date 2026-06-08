@@ -1,0 +1,13 @@
+stages:
+  prepare_data:
+    cmd: echo "Data ready"
+    outs:
+      - data/sample_data.csv
+  train_model:
+    cmd: python train_model.py
+    deps:
+      - data/sample_data.csv
+      - train_model.py
+    outs:
+      - models/sentiment_model.pkl
+      - models/vectorizer.pkl

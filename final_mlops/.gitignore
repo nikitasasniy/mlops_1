@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# pytest
+.pytest_cache/
+.vscode/
+
+# Docker
+.dockerignore
+
+# DVC
+.dvc/cache/
+.dvc/tmp/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local files
+*.local
+.env

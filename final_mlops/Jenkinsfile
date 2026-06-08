@@ -1,0 +1,54 @@
+pipeline {
+    agent any
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Setup Environment') {
+            steps {
+                dir('final_mlops') {
+                    sh '''
+                    python3 -m venv .venv
+                    .venv/bin/pip install --upgrade pip
+                    .venv/bin/pip install -r requirements.txt
+                    '''
+                }
+            }
+        }
+
+        stage('Train Model') {
+            steps {
+                dir('final_mlops') {
+                    sh '.venv/bin/python train_model.py'
+                }
+            }
+        }
+
+        stage('Run Tests') {
+            steps {
+                dir('final_mlops') {
+                    sh '.venv/bin/pytest tests/ -v'
+                }
+            }
+        }
+
+        stage('Docker Build & Push') {
+            steps {
+                dir('final_mlops') {
+                    script {
+                        def git_sha = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                        sh """
+                        docker build -t idealvista/sentiment-final:${git_sha} -t idealvista/sentiment-final:latest .
+                        docker push idealvista/sentiment-final:${git_sha}
+                        docker push idealvista/sentiment-final:latest
+                        """
+                    }
+                }
+            }
+        }
+    }
+}
